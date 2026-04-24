@@ -44,6 +44,23 @@ public class InterpreterMachine implements Machine {
         this.callStack = new ArrayDeque<>();
     }
 
+    public int[] sampleCallStack() {
+        Deque<StackFrame> snapshot = callStack;
+        int size = snapshot.size();
+        if (size == 0) {
+            return new int[0];
+        }
+        int[] result = new int[size];
+        int i = 0;
+        for (StackFrame frame : snapshot) {
+            result[i++] = frame.funcId();
+            if (i >= size) {
+                break;
+            }
+        }
+        return result;
+    }
+
     @FunctionalInterface
     protected interface Operands {
         long get(int index);
