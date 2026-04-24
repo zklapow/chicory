@@ -727,30 +727,69 @@ public final class Compiler {
             asm.mark(invalid);
         }
 
-        // try block
         Label start = new Label();
         Label end = new Label();
-        asm.visitTryCatchBlock(start, end, end, getInternalName(StackOverflowError.class));
+        Label soeCatch = new Label();
+        asm.visitTryCatchBlock(start, end, soeCatch, getInternalName(StackOverflowError.class));
         asm.mark(start);
 
-        // prepare arguments
         asm.load(0, OBJECT_TYPE);
         asm.getfield(internalClassName, "instance", getDescriptor(Instance.class));
+        asm.store(3, OBJECT_TYPE);
+
+        Label loopStart = new Label();
+        asm.mark(loopStart);
+
+        asm.load(3, OBJECT_TYPE);
         asm.dup();
         emitInvokeVirtual(asm, INSTANCE_MEMORY);
         asm.load(1, INT_TYPE);
         asm.load(2, OBJECT_TYPE);
 
-        // return MachineCall.call(instance, memory, funcId, args);
         asm.invokestatic(
                 internalClassName + "MachineCall",
                 "call",
                 MACHINE_CALL_METHOD_TYPE.toMethodDescriptorString(),
                 false);
+
+        asm.load(3, OBJECT_TYPE);
+        asm.invokevirtual(
+                getInternalName(Instance.class),
+                "isTailCallPending",
+                getMethodDescriptor(Type.BOOLEAN_TYPE),
+                false);
+        Label returnResult = new Label();
+        asm.ifeq(returnResult);
+
+        asm.pop();
+        asm.load(3, OBJECT_TYPE);
+        asm.invokevirtual(
+                getInternalName(Instance.class),
+                "tailCallFuncId",
+                getMethodDescriptor(INT_TYPE),
+                false);
+        asm.store(1, INT_TYPE);
+        asm.load(3, OBJECT_TYPE);
+        asm.invokevirtual(
+                getInternalName(Instance.class),
+                "tailCallArgs",
+                getMethodDescriptor(getType(long[].class)),
+                false);
+        asm.store(2, OBJECT_TYPE);
+        asm.load(3, OBJECT_TYPE);
+        asm.invokevirtual(
+                getInternalName(Instance.class),
+                "clearTailCall",
+                getMethodDescriptor(VOID_TYPE),
+                false);
+        asm.goTo(loopStart);
+
+        asm.mark(returnResult);
+        asm.mark(end);
         asm.areturn(OBJECT_TYPE);
 
         // catch StackOverflow
-        asm.mark(end);
+        asm.mark(soeCatch);
         emitInvokeStatic(asm, THROW_CALL_STACK_EXHAUSTED);
         asm.athrow();
     }
