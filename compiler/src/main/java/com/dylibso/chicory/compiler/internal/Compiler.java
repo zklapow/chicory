@@ -1171,30 +1171,30 @@ public final class Compiler {
                     rawMethodTypeFor(type)
                             .appendParameterTypes(Memory.class, Instance.class, int.class);
 
-            // Best value that worked with the 50K small wasm functions
             var maxCallIndirectMethods = MAX_CALL_INDIRECT_METHODS << 2;
-            loadChunkedClass(
-                    functionTypes.size(),
-                    maxCallIndirectMethods,
-                    (collector, start, end, chunkSize) ->
-                            compileExtraClass(
-                                    collector,
-                                    classNameForCallIndirect(this.className, typeId, start),
-                                    (cw) -> {
-                                        emitFunction(
-                                                cw,
-                                                "apply",
-                                                applyParams,
-                                                true,
-                                                a ->
-                                                        compileCallIndirectApply(
-                                                                internalClassName,
-                                                                typeId,
-                                                                type,
-                                                                a,
-                                                                start,
-                                                                end));
-                                    }));
+            maxCallIndirectMethods =
+                    loadChunkedClass(
+                            functionTypes.size(),
+                            maxCallIndirectMethods,
+                            (collector, start, end, chunkSize) ->
+                                    compileExtraClass(
+                                            collector,
+                                            classNameForCallIndirect(this.className, typeId, start),
+                                            (cw) -> {
+                                                emitFunction(
+                                                        cw,
+                                                        "apply",
+                                                        applyParams,
+                                                        true,
+                                                        a ->
+                                                                compileCallIndirectApply(
+                                                                        internalClassName,
+                                                                        typeId,
+                                                                        type,
+                                                                        a,
+                                                                        start,
+                                                                        end));
+                                            }));
 
             assert Integer.bitCount(maxCallIndirectMethods) == 1; // power of two
             int shift = Integer.numberOfTrailingZeros(maxCallIndirectMethods);
@@ -1269,9 +1269,13 @@ public final class Compiler {
         int[] keys = validIds.stream().mapToInt(x -> x).toArray();
         Label[] labels = validIds.stream().map(x -> new Label()).toArray(Label[]::new);
 
-        // push the call args on to the stack...
-        for (int i = 0; i < type.params().size(); i++) {
-            asm.load(i, asmType(type.params().get(i)));
+        // push the call args on to the stack
+        if (hasTooManyParameters(type)) {
+            asm.load(0, LONG_ARRAY_TYPE);
+        } else {
+            for (int i = 0; i < type.params().size(); i++) {
+                asm.load(i, asmType(type.params().get(i)));
+            }
         }
         asm.load(memory, OBJECT_TYPE);
         asm.load(instance, OBJECT_TYPE);
@@ -1281,18 +1285,13 @@ public final class Compiler {
         asm.lookupswitch(invalid, keys, labels);
 
         for (int i = 0; i < validIds.size(); i++) {
-            // case 0:
-            //    return func_0(a, b, memory, callerInstance);
             asm.mark(labels[i]);
             emitInvokeFunction(
                     asm, classNameForFuncGroup(internalClassName, keys[i]), keys[i], type);
             asm.areturn(getType(jvmReturnType(type)));
-            asm.areturn(OBJECT_TYPE);
         }
 
-        // throw new InvalidException("unknown function " + funcId);
         asm.mark(invalid);
-
         asm.load(funcId, INT_TYPE);
         emitInvokeStatic(asm, THROW_UNKNOWN_FUNCTION);
         asm.athrow();
