@@ -100,7 +100,8 @@ public final class Compiler {
     private static final MethodType MACHINE_CALL_METHOD_TYPE =
             methodType(long[].class, Instance.class, Memory.class, int.class, long[].class);
 
-    private static final int MAX_MACHINE_CALL_METHODS = 1024; // must be power of two
+    private static final int MAX_MACHINE_CALL_METHODS =
+            Integer.getInteger("chicory.maxMachineCallMethods", 1024); // must be power of two
     // 1024*12 was empirically determined to work for the 50K small wasm functions.
     // So lets start there and halve it until we find a size that works.
     // This should give us the biggest class size possible.
